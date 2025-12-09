@@ -3,8 +3,23 @@ package gitflow
 import (
 	"strings"
 
-	"github.com/yourname/devgod-cli/internal/shell"
+	"github.com/jeethsoni/devgod-cli/internal/shell"
 )
+
+// RepoRoot returns the absolute path to the git repo root.
+func RepoRoot() (string, error) {
+	out, err := shell.Run("git", "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// IsGitRepo returns true if the current directory is inside a git repo.
+func IsGitRepo() bool {
+	_, err := RepoRoot()
+	return err == nil
+}
 
 func CurrentBranch() (string, error) {
 	out, err := shell.Run("git", "rev-parse", "--abbrev-ref", "HEAD")
