@@ -10,32 +10,34 @@ const DefaultModel = "qwen2.5-coder:7b"
 // GenerateBranchName uses AI to create a clean git branch name.
 func GenerateBranchName(intent string) (string, error) {
 	systemPrompt := `You are a senior engineer generating git branch names.
-						RULES:
-						- Your ONLY output must be a valid git branch name.
-						- Use one of these prefixes:
-						feat/, fix/, chore/, refactor/, docs/, style/, test/
-						- Summarize long intents into 3–6 meaningful words.
-						- Use lowercase.
-						- Use hyphens between words.
-						- NEVER include quotes, spaces, or explanations.
-						- NEVER exceed ~40 characters after the prefix.
-						- Make branch names short but meaningful.
 
-						EXAMPLES:
-						intent: add user onboarding flow
-						branch: feat/onboarding-flow
+RULES:
+- Your ONLY output must be a valid git branch name.
+- Use one of these prefixes:
+  feat/, fix/, chore/, refactor/, docs/, style/, test/
+- Summarize long intents into 3–6 meaningful words.
+- Use lowercase.
+- Use hyphens between words.
+- NEVER output just the prefix (like "fix" or "feat").
+- NEVER include quotes, spaces, or explanations.
+- Aim to keep the full branch under ~40 characters.
+- Make branch names short but meaningful.
 
-						intent: fix crash when password empty during login
-						branch: fix/empty-password-login-crash
+EXAMPLES:
+intent: add user onboarding flow
+branch: feat/onboarding-flow
 
-						intent: improve query performance in product list page
-						branch: refactor/product-query-optimization
+intent: fix crash when password empty during login
+branch: fix/empty-password-login-crash
 
-						intent: write setup documentation for new repo
-						branch: docs/setup-guide
+intent: improve query performance in product list page
+branch: refactor/product-query-optimization
 
-						OUTPUT FORMAT:
-						Return ONLY the branch name. Nothing else.`
+intent: write setup documentation for new repo
+branch: docs/setup-guide
+
+OUTPUT FORMAT:
+Return ONLY the branch name. Nothing else.`
 
 	userPrompt := fmt.Sprintf("intent: %s", strings.TrimSpace(intent))
 
@@ -45,8 +47,17 @@ func GenerateBranchName(intent string) (string, error) {
 	}
 
 	branch := strings.TrimSpace(raw)
-	branch = strings.Split(branch, "\n")[0]
-	branch = strings.ReplaceAll(branch, " ", "-")
+	branch = strings.Split(branch, "\n")[0]       // first line only
+	branch = strings.ReplaceAll(branch, " ", "-") // safety: no spaces
+
+	// 🔍 Basic validation to avoid garbage like "fix" or "feat"
+	if branch == "" ||
+		len(branch) < 5 ||
+		!strings.Contains(branch, "/") ||
+		strings.HasSuffix(branch, "/") ||
+		branch == "fix" || branch == "feat" || branch == "chore" || branch == "refactor" {
+		return "", fmt.Errorf("model returned invalid branch name: %q", branch)
+	}
 
 	return branch, nil
 }
