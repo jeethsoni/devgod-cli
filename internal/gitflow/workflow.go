@@ -3,6 +3,8 @@ package gitflow
 import (
 	"fmt"
 	"strings"
+
+	"github.com/jeethsoni/devgod-cli/internal/ai"
 )
 
 // StartTask creates a new branch for the task based on the intent.
@@ -22,7 +24,10 @@ func StartTask(intent string) error {
 		return fmt.Errorf("intent cannot be empty")
 	}
 
-	branchName := toBranchName(intent)
+	branchName, err := ai.GenerateBranchName(intent)
+	if err != nil {
+		return fmt.Errorf("failed to generate branch name: %w", err)
+	}
 
 	// Checkout new branch
 	if err := CheckoutNewBranch(branchName); err != nil {
@@ -78,7 +83,10 @@ func FinishTask() error {
 	}
 
 	// Generate AI commit message
-	commitMsg := simpleCommitMessage(state.ActiveTask.Intent)
+	commitMsg, err := ai.GenerateCommitMessage(state.ActiveTask.Intent, diff)
+	if err != nil {
+		return fmt.Errorf("failed to generate commit message: %w", err)
+	}
 
 	if err := Commit(commitMsg); err != nil {
 		return fmt.Errorf("commit failed: %w", err)
@@ -88,14 +96,4 @@ func FinishTask() error {
 	fmt.Println(commitMsg)
 
 	return nil
-}
-
-func toBranchName(intent string) string {
-	cleaned := strings.ToLower(strings.TrimSpace(intent))
-	cleaned = strings.ReplaceAll(cleaned, " ", "-")
-	return "fix/" + cleaned
-}
-
-func simpleCommitMessage(intent string) string {
-	return "chore: " + intent
 }
