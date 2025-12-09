@@ -2,20 +2,27 @@ package gitflow
 
 import (
 	"fmt"
-
-	"github.com/jeethsoni/devgod-cli/internal/ai"
+	"strings"
 )
 
+// StartTask creates a new branch for the task based on the intent.
 func StartTask(intent string) error {
 	if !IsGitRepo() {
 		return fmt.Errorf("not inside a git repo")
 	}
 
-	// Generate AI branch name
-	branchName, err := ai.GenerateBranchName(intent)
-	if err != nil {
-		return err
+	// // Generate AI branch name
+	// branchName, err := ai.GenerateBranchName(intent)
+	// if err != nil {
+	// 	return err
+	// }
+
+	intent = strings.TrimSpace(intent)
+	if intent == "" {
+		return fmt.Errorf("intent cannot be empty")
 	}
+
+	branchName := toBranchName(intent)
 
 	// Checkout new branch
 	if err := CheckoutNewBranch(branchName); err != nil {
@@ -38,6 +45,7 @@ func StartTask(intent string) error {
 	return nil
 }
 
+// FinishTask stages changes, generates commit message, and creates commit.
 func FinishTask() error {
 	if !IsGitRepo() {
 		return fmt.Errorf("not inside a git repo")
@@ -64,17 +72,30 @@ func FinishTask() error {
 		return err
 	}
 
+	if strings.TrimSpace(diff) == "" {
+		fmt.Println("No staged changes to commit.")
+		return nil
+	}
+
 	// Generate AI commit message
-	commitMsg, err := ai.GenerateCommitMessage(state.ActiveTask.Intent, diff)
-	if err != nil {
-		return err
-	}
+	commitMsg := simpleCommitMessage(state.ActiveTask.Intent)
 
-	// Commit changes
 	if err := Commit(commitMsg); err != nil {
-		return err
+		return fmt.Errorf("commit failed: %w", err)
 	}
 
-	fmt.Println("Committed changes with message:", commitMsg)
+	fmt.Println("✅ Commit created:")
+	fmt.Println(commitMsg)
+
 	return nil
+}
+
+func toBranchName(intent string) string {
+	cleaned := strings.ToLower(strings.TrimSpace(intent))
+	cleaned = strings.ReplaceAll(cleaned, " ", "-")
+	return "fix/" + cleaned
+}
+
+func simpleCommitMessage(intent string) string {
+	return "chore: " + intent
 }
