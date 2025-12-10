@@ -14,7 +14,6 @@ import (
 //
 // Usage:
 //
-//	stop := ui.StartSpinner("Asking AI for branch name")
 //	branchName, err := ai.GenerateBranchName(intent)
 //	stop()
 func StartSpinner(message string) func() {

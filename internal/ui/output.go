@@ -19,7 +19,6 @@ func separator() {
 func PrintCommitPlan(plan CommitPlan) {
 	fmt.Println()
 
-	// Header: one emoji + cyan color, rest is plain
 	fmt.Println(Cyan("🚀 DEVGOD COMMIT PREVIEW"))
 	separator()
 

@@ -42,8 +42,8 @@ func StartTask(intent string) error {
 		return err
 	}
 
-	// 🧠 AI branch naming with loading dots
-	stop := ui.StartSpinner("Asking AI for branch name")
+	// AI branch naming with loading dots
+	stop := ui.StartSpinner("Asking the dev gods for the perfect branch name...")
 	branchName, err := ai.GenerateBranchName(intent)
 	stop()
 	if err != nil {
@@ -131,7 +131,7 @@ func FinishTask() error {
 	}
 
 	// Ai commit message with loading dots
-	stop := ui.StartSpinner("Asking AI for commit message")
+	stop := ui.StartSpinner("Letting the commit gods cook...")
 
 	// AI commit message
 	commitMsg, err := ai.GenerateCommitMessage(state.ActiveTask.Intent, diff)
