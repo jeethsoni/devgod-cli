@@ -13,7 +13,7 @@ func Confirm(prompt string) bool {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Printf("%s [y/N]: ", prompt)
+		fmt.Printf("%s [y/n]: ", prompt)
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println(Red("Error reading input:"), err)
@@ -23,11 +23,9 @@ func Confirm(prompt string) bool {
 		answer := strings.ToLower(strings.TrimSpace(input))
 
 		if answer == "y" || answer == "yes" {
-			fmt.Println(Green("✔️ Confirmed."))
 			return true
 		}
 		if answer == "" || answer == "n" || answer == "no" {
-			fmt.Println(Red("Cancelled."))
 			return false
 		}
 

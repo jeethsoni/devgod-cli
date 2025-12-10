@@ -32,7 +32,6 @@ func PrintCommitPlan(plan CommitPlan) {
 	if strings.TrimSpace(plan.StagedSummary) == "" {
 		fmt.Println("  (none)")
 	} else {
-		fmt.Println("Changes staged for commit:")
 		lines := strings.Split(plan.StagedSummary, "\n")
 		for _, line := range lines {
 			if strings.TrimSpace(line) != "" {

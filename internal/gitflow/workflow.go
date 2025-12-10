@@ -50,6 +50,11 @@ func StartTask(intent string) error {
 		return fmt.Errorf("failed to generate branch name: %w", err)
 	}
 
+	if !ui.Confirm(fmt.Sprintf("Use branch name \"%s\"?", branchName)) {
+		fmt.Println(ui.Red("❌ Branch creation cancelled."))
+		return nil
+	}
+
 	// Checkout new branch
 	if err := CheckoutNewBranch(branchName); err != nil {
 		return err

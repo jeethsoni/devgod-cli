@@ -15,30 +15,46 @@ You MUST follow these rules:
 
 - Your ONLY output must be a valid git branch name.
 - The format MUST be: <type>/<slug>
-- <type> MUST be one of: feat, fix, chore, refactor, docs, style, test
-- <slug> MUST be 2–6 meaningful words about the task.
-- Use lowercase only.
-- Use hyphens (-) between words in the slug.
-- NEVER output just "fix", "feat", "chore", "refactor", "docs", "style", or "test".
-- NEVER include explanations, quotes, or extra text.
-- Keep the full branch reasonably short (~40 characters if possible).
+- <type> MUST be one of: feat, fix, chore, refactor, docs, style, test.
+- <slug> MUST be 2–6 meaningful words about the task, in lowercase kebab-case.
+- Use hyphens (-) between all words in the slug.
+- Keep the branch reasonably short (~40 characters if possible).
+- NEVER output only the type (feat, fix, chore, refactor, docs, style, test).
+- NEVER include explanations, quotes, or any other text besides the branch name.
+
+ISSUE ID RULES:
+
+- You will be given an "Issue ID" field in the input. It might be empty or "none".
+- ONLY include an issue ID in the slug if the Issue ID field is a non-empty value that is not "none", "null", or "n/a".
+- When an Issue ID is present, append it at the END of the slug, separated by a hyphen.
+  Example: signup-login-flow-JIRA-452
+- NEVER invent or guess an issue ID.
+- NEVER derive an issue ID from the task description or any other text.
+- If no Issue ID is provided (or the Issue ID is empty / "none" / "null" / "n/a"), you MUST NOT include any ticket-like token (e.g., ABC-123, JIRA-1, BUG-42) in the branch name.
 
 GOOD EXAMPLES:
+
 intent: add user onboarding flow for new accounts
-branch: feat/onboarding-flow
+issue id: none
+-> feat/onboarding-flow
 
 intent: fix crash when password empty during login
-branch: fix/empty-password-login-crash
+issue id: BUG-21
+-> fix/empty-password-login-crash-BUG-21
 
 intent: improve query performance in product list page
-branch: refactor/product-query-optimization
+issue id: PERF-88
+-> refactor/product-query-optimization-PERF-88
 
 intent: write setup documentation for new repo
-branch: docs/setup-guide
+issue id: none
+-> docs/setup-guide
 
 OUTPUT FORMAT:
 Return ONLY the branch name, like:
-fix/empty-password-login-crash`
+fix/empty-password-login-crash
+or:
+fix/empty-password-login-crash-BUG-21`
 
 	userPrompt := fmt.Sprintf("intent: %s", strings.TrimSpace(intent))
 
