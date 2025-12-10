@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jeethsoni/devgod-cli/internal/ai"
+	"github.com/jeethsoni/devgod-cli/internal/ui"
 )
 
 var hasLetter = regexp.MustCompile(`[A-Za-z]`)
@@ -41,7 +42,10 @@ func StartTask(intent string) error {
 		return err
 	}
 
+	// 🧠 AI branch naming with loading dots
+	stop := ui.StartSpinner("Asking AI for branch name")
 	branchName, err := ai.GenerateBranchName(intent)
+	stop()
 	if err != nil {
 		return fmt.Errorf("failed to generate branch name: %w", err)
 	}
@@ -82,6 +86,33 @@ func FinishTask() error {
 		return fmt.Errorf("no active task found")
 	}
 
+	// Check if the user is still on the correct branch
+	// Check if the user is still on the correct branch
+	currentBranch, err := CurrentBranch()
+	if err == nil && currentBranch != state.ActiveTask.Branch {
+		fmt.Println(ui.Yellow("⚠️ You are NOT on the branch for this task."))
+		fmt.Println("Expected branch:", state.ActiveTask.Branch)
+		fmt.Println("Current branch: ", currentBranch)
+		fmt.Println()
+
+		if !ui.Confirm("Switch to the correct branch now?") {
+			fmt.Println(ui.Red("Commit cancelled. Switch to the correct branch and try again."))
+			return nil
+		}
+
+		// Try to switch branches
+		if err := CheckoutBranch(state.ActiveTask.Branch); err != nil {
+			fmt.Println(ui.Red("❌ Failed to switch branches automatically."))
+			fmt.Println("Please run:")
+			fmt.Println("  git checkout", state.ActiveTask.Branch)
+			fmt.Println("and then retry.")
+			return err
+		}
+
+		fmt.Println(ui.Green("✔️ Switched to the correct branch."))
+		fmt.Println()
+	}
+
 	// Stage changes
 	if HasUnstagedChanges() {
 		if err := StageAll(); err != nil {
@@ -99,10 +130,30 @@ func FinishTask() error {
 		return nil
 	}
 
-	// Generate AI commit message
+	// AI commit message
 	commitMsg, err := ai.GenerateCommitMessage(state.ActiveTask.Intent, diff)
 	if err != nil {
-		return fmt.Errorf("failed to generate commit message: %w", err)
+		fmt.Println(ui.Red("❌ Failed to generate commit message with AI."))
+		fmt.Println("Please complete this commit manually using git (e.g. `git commit -m \"...\"`) and then continue your flow.")
+		return err
+	}
+
+	summary, _ := StagedSummary() // ignore error; not critical for commit
+
+	plan := ui.CommitPlan{
+		Branch:        state.ActiveTask.Branch,
+		Intent:        state.ActiveTask.Intent,
+		StagedSummary: summary,
+		CommitMessage: commitMsg,
+	}
+
+	// Show plan
+	ui.PrintCommitPlan(plan)
+
+	// Ask user before committing
+	if !ui.Confirm("Create this commit?") {
+		fmt.Println("❌ Commit cancelled.")
+		return nil
 	}
 
 	if err := Commit(commitMsg); err != nil {

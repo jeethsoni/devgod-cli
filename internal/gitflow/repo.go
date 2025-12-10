@@ -55,3 +55,14 @@ func HasUnstagedChanges() bool {
 func StagedDiff() (string, error) {
 	return shell.Run("git", "diff", "--cached")
 }
+
+// Returns a summary of staged changes.
+func StagedSummary() (string, error) {
+	// `git status --short` is familiar and readable
+	return shell.Run("git", "status", "--short")
+}
+
+func CheckoutBranch(name string) error {
+	_, err := shell.Run("git", "checkout", name)
+	return err
+}
