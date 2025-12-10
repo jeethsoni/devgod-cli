@@ -2,10 +2,32 @@ package gitflow
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/jeethsoni/devgod-cli/internal/ai"
 )
+
+var hasLetter = regexp.MustCompile(`[A-Za-z]`)
+
+func validateIntent(intent string) error {
+	intent = strings.TrimSpace(intent)
+	if intent == "" {
+		return fmt.Errorf("intent cannot be empty")
+	}
+
+	// Must contain at least one letter (block pure numbers like "30390359")
+	if !hasLetter.MatchString(intent) {
+		return fmt.Errorf("intent must contain at least one letter, got %q", intent)
+	}
+
+	// Very short stuff is probably accidental, nudge user to be clearer
+	if len([]rune(intent)) < 6 {
+		return fmt.Errorf("intent too short; describe what you want to do, e.g. \"fix login crash when password is empty\"")
+	}
+
+	return nil
+}
 
 // StartTask creates a new branch for the task based on the intent.
 func StartTask(intent string) error {
@@ -13,15 +35,10 @@ func StartTask(intent string) error {
 		return fmt.Errorf("not inside a git repo")
 	}
 
-	// // Generate AI branch name
-	// branchName, err := ai.GenerateBranchName(intent)
-	// if err != nil {
-	// 	return err
-	// }
-
 	intent = strings.TrimSpace(intent)
-	if intent == "" {
-		return fmt.Errorf("intent cannot be empty")
+
+	if err := validateIntent(intent); err != nil {
+		return err
 	}
 
 	branchName, err := ai.GenerateBranchName(intent)
@@ -46,7 +63,7 @@ func StartTask(intent string) error {
 	}
 
 	fmt.Println("Created branch:", branchName)
-	fmt.Println("Now, make your changes and run: devgod-cli git to finish.")
+	fmt.Println("Now, make your changes and run: devgod git to finish.")
 	return nil
 }
 
