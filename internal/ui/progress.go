@@ -2,37 +2,56 @@ package ui
 
 import (
 	"fmt"
-	"strings"
+	"os"
+	"sync/atomic"
 	"time"
+
+	spin "github.com/tj/go-spin"
 )
 
-// StartSpinner shows "message..." with animated dots while some work is running.
-// It returns a stop function you MUST call when the work is done.
+// StartSpinner starts an animated CLI spinner with the given message and
+// returns a func you can call to stop it.
+//
+// Usage:
+//
+//	stop := ui.StartSpinner("Asking AI for branch name")
+//	branchName, err := ai.GenerateBranchName(intent)
+//	stop()
 func StartSpinner(message string) func() {
-	done := make(chan struct{})
+	s := &spinnerState{
+		message: message,
+		done:    make(chan struct{}),
+	}
 
-	go func() {
-		ticker := time.NewTicker(250 * time.Millisecond)
-		defer ticker.Stop()
+	go s.loop()
 
-		dots := 0
-		for {
-			select {
-			case <-done:
-				// Clear the line and move to next
-				fmt.Print("\r")
-				fmt.Println(strings.Repeat(" ", len(message)+4))
-				fmt.Print("\r")
-				return
-			case <-ticker.C:
-				dots = (dots + 1) % 4 // 0,1,2,3
-				fmt.Printf("\r%s%s", message, strings.Repeat(".", dots))
-			}
-		}
-	}()
-
-	// stop function
+	// Return stop function that is safe to call once
 	return func() {
-		close(done)
+		if atomic.CompareAndSwapInt32(&s.stopped, 0, 1) {
+			close(s.done)
+			// Clear the spinner line so the next print starts clean
+			fmt.Fprint(os.Stdout, "\r\033[K")
+		}
+	}
+}
+
+type spinnerState struct {
+	message string
+	done    chan struct{}
+	stopped int32
+}
+
+func (s *spinnerState) loop() {
+	sp := spin.New()
+	for {
+		select {
+		case <-s.done:
+			return
+		default:
+			frame := sp.Next()
+			// \r = carriage return to start of line (overwrite in place)
+			fmt.Fprintf(os.Stdout, "\r%s %s", frame, s.message)
+			time.Sleep(80 * time.Millisecond)
+		}
 	}
 }
