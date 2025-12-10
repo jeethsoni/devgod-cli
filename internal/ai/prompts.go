@@ -11,20 +11,20 @@ const DefaultModel = "qwen2.5-coder:7b"
 func GenerateBranchName(intent string) (string, error) {
 	systemPrompt := `You are a senior engineer generating git branch names.
 
-RULES:
-- Your ONLY output must be a valid git branch name.
-- Use one of these prefixes:
-  feat/, fix/, chore/, refactor/, docs/, style/, test/
-- Summarize long intents into 3–6 meaningful words.
-- Use lowercase.
-- Use hyphens between words.
-- NEVER output just the prefix (like "fix" or "feat").
-- NEVER include quotes, spaces, or explanations.
-- Aim to keep the full branch under ~40 characters.
-- Make branch names short but meaningful.
+You MUST follow these rules:
 
-EXAMPLES:
-intent: add user onboarding flow
+- Your ONLY output must be a valid git branch name.
+- The format MUST be: <type>/<slug>
+- <type> MUST be one of: feat, fix, chore, refactor, docs, style, test
+- <slug> MUST be 2–6 meaningful words about the task.
+- Use lowercase only.
+- Use hyphens (-) between words in the slug.
+- NEVER output just "fix", "feat", "chore", "refactor", "docs", "style", or "test".
+- NEVER include explanations, quotes, or extra text.
+- Keep the full branch reasonably short (~40 characters if possible).
+
+GOOD EXAMPLES:
+intent: add user onboarding flow for new accounts
 branch: feat/onboarding-flow
 
 intent: fix crash when password empty during login
@@ -37,26 +37,45 @@ intent: write setup documentation for new repo
 branch: docs/setup-guide
 
 OUTPUT FORMAT:
-Return ONLY the branch name. Nothing else.`
+Return ONLY the branch name, like:
+fix/empty-password-login-crash`
 
 	userPrompt := fmt.Sprintf("intent: %s", strings.TrimSpace(intent))
 
+	if intent == "" {
+		return "", fmt.Errorf("intent cannot be empty")
+	}
+
 	raw, err := Chat(DefaultModel, systemPrompt, userPrompt)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to call AI: %w", err)
 	}
 
 	branch := strings.TrimSpace(raw)
-	branch = strings.Split(branch, "\n")[0]       // first line only
-	branch = strings.ReplaceAll(branch, " ", "-") // safety: no spaces
 
-	// 🔍 Basic validation to avoid garbage like "fix" or "feat"
+	// If the model ever returns things like "branch: fix/...", strip that prefix.
+	branch = strings.TrimPrefix(branch, "branch:")
+	branch = strings.TrimSpace(branch)
+
+	// Take only the first line, in case it babbles.
+	if idx := strings.Index(branch, "\n"); idx != -1 {
+		branch = branch[:idx]
+	}
+
+	branch = strings.TrimSpace(branch)
+	branch = strings.ReplaceAll(branch, " ", "-")
+
+	// Minimal validation: still no fallback, just error if garbage
 	if branch == "" ||
 		len(branch) < 5 ||
-		!strings.Contains(branch, "/") ||
-		strings.HasSuffix(branch, "/") ||
-		branch == "fix" || branch == "feat" || branch == "chore" || branch == "refactor" {
+		!strings.Contains(branch, "/") {
 		return "", fmt.Errorf("model returned invalid branch name: %q", branch)
+	}
+
+	prefix := strings.SplitN(branch, "/", 2)[0]
+	if prefix != "feat" && prefix != "fix" && prefix != "chore" &&
+		prefix != "refactor" && prefix != "docs" && prefix != "style" && prefix != "test" {
+		return "", fmt.Errorf("model returned invalid prefix in branch name: %q", branch)
 	}
 
 	return branch, nil
