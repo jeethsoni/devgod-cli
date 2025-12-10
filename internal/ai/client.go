@@ -12,6 +12,7 @@ import (
 type ollamaChatRequest struct {
 	Model    string          `json:"model"`
 	Messages []ollamaMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
 }
 
 type ollamaMessage struct {
@@ -33,6 +34,7 @@ func Chat(model string, systemPrompt string, userPrompt string) (string, error) 
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
 		},
+		Stream: false,
 	}
 
 	data, err := json.Marshal(reqBody)
