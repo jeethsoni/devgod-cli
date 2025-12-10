@@ -130,8 +130,12 @@ func FinishTask() error {
 		return nil
 	}
 
+	// Ai commit message with loading dots
+	stop := ui.StartSpinner("Asking AI for commit message")
+
 	// AI commit message
 	commitMsg, err := ai.GenerateCommitMessage(state.ActiveTask.Intent, diff)
+	stop()
 	if err != nil {
 		fmt.Println(ui.Red("❌ Failed to generate commit message with AI."))
 		fmt.Println("Please complete this commit manually using git (e.g. `git commit -m \"...\"`) and then continue your flow.")
