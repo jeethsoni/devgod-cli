@@ -20,7 +20,7 @@ func PrintCommitPlan(plan CommitPlan) {
 	fmt.Println()
 
 	// Header: one emoji + cyan color, rest is plain
-	fmt.Println(Cyan("🚀 devgod commit preview"))
+	fmt.Println(Cyan("🚀 DEVGOD COMMIT PREVIEW"))
 	separator()
 
 	fmt.Println("Branch:")
@@ -33,12 +33,12 @@ func PrintCommitPlan(plan CommitPlan) {
 	if strings.TrimSpace(plan.StagedSummary) == "" {
 		fmt.Println("  (none)")
 	} else {
+		fmt.Println("Changes staged for commit:")
 		lines := strings.Split(plan.StagedSummary, "\n")
 		for _, line := range lines {
-			if strings.TrimSpace(line) == "" {
-				continue
+			if strings.TrimSpace(line) != "" {
+				fmt.Println("   " + ColorizeStatusLine(line))
 			}
-			fmt.Println("  ", line)
 		}
 	}
 
