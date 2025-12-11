@@ -1,254 +1,248 @@
 package gitflow
 
 import (
+	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/jeethsoni/devgod-cli/internal/ai"
 	"github.com/jeethsoni/devgod-cli/internal/ui"
 )
 
-const defaultBaseBranch = "main" // change to "master" or your default if needed
+type PRSizeStats struct {
+	FilesChanged int
+	LinesAdded   int
+	LinesDeleted int
+}
 
-// CreatePR is the main entrypoint for `devgod pr`.
-// It:
-//   - Ensures you're in a git repo and on the active task branch
-//   - Ensures GitHub CLI (gh) is installed (and can install it with consent)
-//   - Ensures the user is authenticated with `gh auth login` (and can run it for them)
-//   - Generates a PR title/body/reviewers using AI (Ollama)
-//   - Lets you select reviewers from real repo collaborators/teams via `gh api`
-//   - Shows a PR preview and asks for confirmation
-//   - Calls `gh pr create` to actually create the PR on GitHub
+// PRSizeStatsBetween computes how many files and lines changed between base and head.
+func PRSize(baseBranch, headBranch string) (*PRSizeStats, error) {
+	cmd := exec.Command("git", "diff", "--numstat", fmt.Sprintf("%s..%s", baseBranch, headBranch))
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to run git diff --numstat: %w", err)
+	}
+
+	stats := &PRSizeStats{}
+	lines := strings.Split(string(out), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 3 {
+			continue
+		}
+
+		added := parseNumstatField(parts[0])
+		deleted := parseNumstatField(parts[1])
+
+		stats.FilesChanged++
+		stats.LinesAdded += added
+		stats.LinesDeleted += deleted
+	}
+
+	return stats, nil
+}
+
+func parseNumstatField(val string) int {
+	val = strings.TrimSpace(val)
+	if val == "" || val == "-" {
+		return 0
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// DiffSummary returns a name-status summary between base and head,
+// similar to "git diff --name-status base..head".
+func DiffSummary(baseBranch, headBranch string) (string, error) {
+	cmd := exec.Command("git", "diff", "--name-status", fmt.Sprintf("%s..%s", baseBranch, headBranch))
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to run git diff --name-status: %w", err)
+	}
+	return string(out), nil
+}
+
+// CreatePR generates PR metadata and creates a GitHub PR using gh.
 func CreatePR() error {
 	if !IsGitRepo() {
 		return fmt.Errorf("not inside a git repo")
 	}
 
+	// Ensure gh is present and authenticated
+	if err := ensureGitHubCLIInstalled(); err != nil {
+		return err
+	}
+	if err := ensureGHAuthenticated(); err != nil {
+		return err
+	}
+
+	// Load devgod state to get intent + branch
 	state, err := LoadState()
 	if err != nil {
 		return err
 	}
 	if state.ActiveTask == nil {
-		return fmt.Errorf("no active task found")
+		return fmt.Errorf("no active task found. Run `devgod git \"your intent\"` first")
 	}
 
-	taskBranch := state.ActiveTask.Branch
-
-	currentBranch, err := CurrentBranch()
+	branch, err := CurrentBranch()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
-	// Ensure we are on the task branch
-	if currentBranch != taskBranch {
-		fmt.Println(ui.Yellow("⚠️ You are NOT on the branch for this task."))
-		fmt.Println("Expected branch:", taskBranch)
-		fmt.Println("Current branch:", currentBranch)
+	baseBranch := "main" // could be configurable later
+
+	// 🔍 1. Compute PR size stats
+	stats, err := PRSize(baseBranch, branch)
+	if err != nil {
+		return fmt.Errorf("failed to compute PR size: %w", err)
+	}
+	totalLines := stats.LinesAdded + stats.LinesDeleted
+
+	fmt.Println()
+	fmt.Println("📏 PR size check")
+	fmt.Printf("   Files changed: %d\n", stats.FilesChanged)
+	fmt.Printf("   Lines added:   %d\n", stats.LinesAdded)
+	fmt.Printf("   Lines deleted: %d\n", stats.LinesDeleted)
+	fmt.Printf("   Total changes: %d lines\n", totalLines)
+	fmt.Println()
+
+	// Best-practice thresholds
+	const (
+		idealLinesMax = 50
+		softFilesMax  = 10
+		softLinesMax  = 200
+		hardFilesMax  = 20
+		hardLinesMax  = 400
+	)
+
+	// Hard block: way too big
+	if stats.FilesChanged > hardFilesMax || totalLines > hardLinesMax {
+		fmt.Println(ui.Red("❌ This PR is very large according to best practices."))
+		fmt.Printf("   Recommended: <= %d files, <= %d lines of changes.\n", softFilesMax, softLinesMax)
+		fmt.Printf("   Current: %d files, %d lines.\n", stats.FilesChanged, totalLines)
+		fmt.Println()
+		fmt.Println("Please split this work into smaller PRs (for example feature slices or logical chunks) and try again.")
+		return fmt.Errorf("PR too large; creation blocked by devgod size guard")
+	}
+
+	// Soft warning: above recommended but not crazy
+	if stats.FilesChanged > softFilesMax || totalLines > softLinesMax {
+		fmt.Println(ui.Yellow("⚠️ This PR is larger than recommended."))
+		fmt.Printf("   Ideal: around %d lines and as few files as possible.\n", idealLinesMax)
+		fmt.Printf("   Recommended maximum: %d files, %d lines of changes.\n", softFilesMax, softLinesMax)
+		fmt.Printf("   Current: %d files, %d lines.\n", stats.FilesChanged, totalLines)
 		fmt.Println()
 
-		if !ui.Confirm("Switch to the correct branch now?") {
-			fmt.Println(ui.Red("PR flow cancelled. Switch to the correct branch and try again."))
+		if !ui.Confirm("Proceed with creating this larger PR anyway?") {
+			fmt.Println(ui.Red("PR creation cancelled. Consider splitting into smaller PRs."))
 			return nil
 		}
-
-		if err := CheckoutBranch(taskBranch); err != nil {
-			fmt.Println(ui.Red("❌ Failed to switch branches automatically."))
-			fmt.Println("Please run:")
-			fmt.Println("  git checkout", taskBranch)
-			fmt.Println("and then retry.")
-			return err
-		}
-
-		fmt.Println(ui.Green("✔️ Switched to the correct branch."))
-		fmt.Println()
-	}
-
-	// 1️⃣ Ensure GitHub CLI exists (and optionally install it)
-	if !ghInstalled() {
-		fmt.Println(ui.Yellow("⚠️ GitHub CLI (gh) is not installed."))
-
-		if ui.Confirm("Would you like devgod to install GitHub CLI for you?") {
-			fmt.Println(ui.Green("✔️ Installing GitHub CLI…"))
-			if err := installGH(); err != nil {
-				fmt.Println(ui.Red("❌ GitHub CLI installation failed:"))
-				return err
-			}
-			fmt.Println(ui.Green("✔️ GitHub CLI installed successfully!"))
-		} else {
-			fmt.Println(ui.Red("❌ Cannot continue PR flow without GitHub CLI."))
-			return nil
-		}
-	}
-
-	// 2️⃣ 🔐 Ensure the user is authenticated with GitHub CLI.
-	fmt.Println(ui.Yellow("Checking GitHub CLI authentication…"))
-	if err := ensureGHAuthenticated(); err != nil {
-		// ensureGHAuthenticated already prints what happened
-		return nil
-	}
-	// 3️⃣ Now it's safe to continue with git diff + AI, because gh is installed AND logged in.
-
-	// Diff vs base branch for PR context
-	diff, err := diffAgainstBase(defaultBaseBranch)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(diff) == "" {
-		fmt.Println(ui.Yellow("No changes detected between base and this branch."))
-		fmt.Println("You can still create a PR manually if needed.")
-		return nil
-	}
-
-	// Ask AI (Ollama) to generate PR metadata (title, body, reviewers)
-	stop := ui.StartSpinner("Asking the dev gods to craft your PR…")
-	meta, err := ai.GeneratePRMetadata(state.ActiveTask.Intent, diff, taskBranch, defaultBaseBranch)
-	stop()
-	if err != nil {
-		fmt.Println(ui.Red("❌ Failed to generate PR metadata with AI."))
-		return err
-	}
-
-	// Try to fetch actual collaborators/teams from GitHub for reviewer selection
-	var chosenReviewers []string
-	availableReviewers, err := getReviewers()
-	if err != nil {
-		fmt.Println(ui.Yellow("⚠️ Could not fetch reviewers from GitHub:"), err)
-		fmt.Println("Using AI-suggested reviewers only (if any).")
-		chosenReviewers = meta.Reviewers
-	} else if len(availableReviewers) == 0 {
-		fmt.Println(ui.Yellow("⚠️ No collaborators/teams found for this repo."))
-		chosenReviewers = meta.Reviewers
 	} else {
+		// Tiny/ideal PR
+		fmt.Println(ui.Green("✅ PR size looks good (within recommended range)."))
 		fmt.Println()
-		fmt.Println("📌 Select reviewers for this PR (collaborators/teams from this repo):")
-		chosen := ui.SelectMultiple("Available reviewers:", availableReviewers)
-		if len(chosen) == 0 {
-			fmt.Println(ui.Yellow("No reviewers selected. Falling back to AI suggestions (if any)."))
-			chosenReviewers = meta.Reviewers
-		} else {
-			chosenReviewers = chosen
-		}
 	}
 
-	// Override reviewers with chosen ones (if we have any)
-	if len(chosenReviewers) > 0 {
-		meta.Reviewers = chosenReviewers
-	}
-
-	// Show PR preview with final reviewers list
-	printPRPreview(taskBranch, defaultBaseBranch, meta.Title, meta.Body, meta.Reviewers)
-
-	// Confirm before actually creating PR
-	if !ui.Confirm("Create this PR on GitHub?") {
-		fmt.Println(ui.Red("PR flow cancelled."))
-		return nil
-	}
-
-	// Make sure branch is pushed before creating PR
-	stop = ui.StartSpinner("Pushing branch to origin…")
-	if err := gitPushBranch(taskBranch); err != nil {
-		stop()
-		return err
-	}
-	stop()
-
-	// Create PR via GitHub CLI
-	stop = ui.StartSpinner("Creating PR on GitHub via gh…")
-	if err := ghCreatePR(meta.Title, meta.Body, taskBranch, defaultBaseBranch, meta.Reviewers); err != nil {
-		stop()
-		fmt.Println(ui.Red("❌ Failed to create PR via GitHub CLI:"))
-		return err
-	}
-	stop()
-
-	return nil
-}
-
-// diffAgainstBase returns `git diff baseBranch...HEAD` as a string.
-func diffAgainstBase(baseBranch string) (string, error) {
-	cmd := exec.Command("git", "diff", fmt.Sprintf("%s...HEAD", baseBranch))
-	out, err := cmd.CombinedOutput()
+	// 🔁 2. Build context for AI (summary keeps it concise)
+	summary, err := DiffSummary(baseBranch, branch)
 	if err != nil {
-		return "", fmt.Errorf("git diff %s...HEAD failed: %w\n%s", baseBranch, err, string(out))
+		return fmt.Errorf("failed to compute diff summary: %w", err)
 	}
-	return string(out), nil
-}
 
-// gitPushBranch runs `git push -u origin <branch>`.
-// It assumes you're already on <branch>.
-func gitPushBranch(branch string) error {
-	cmd := exec.Command("git", "push", "-u", "origin", branch)
-	out, err := cmd.CombinedOutput()
+	// 🧠 3. Ask AI for PR title + body
+	stop := ui.StartSpinner("Asking the PR gods to write your title & description...")
+	meta, err := ai.GeneratePRMetadata(state.ActiveTask.Intent, summary, branch, baseBranch)
+	stop()
 	if err != nil {
-		fmt.Println(ui.Red("❌ git push failed:"))
-		fmt.Println(string(out))
-		return err
-	}
-	return nil
-}
-
-// ghCreatePR uses the installed GitHub CLI to create a PR.
-// It passes title, body, base, head, and reviewers.
-func ghCreatePR(title, body, head, base string, reviewers []string) error {
-	args := []string{
-		"pr", "create",
-		"--title", title,
-		"--body", body,
-		"--base", base,
-		"--head", head,
+		return fmt.Errorf("failed to generate PR metadata with AI: %w", err)
 	}
 
-	// Add reviewers if present
-	for _, r := range sanitizeReviewers(reviewers) {
-		args = append(args, "--reviewer", r)
+	// 4. Reviewers selection
+	reviewers, err := getReviewersOrAsk()
+	if err != nil {
+		return fmt.Errorf("failed to select reviewers: %w", err)
 	}
 
-	cmd := exec.Command("gh", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
-}
-
-// sanitizeReviewers strips leading '@' and trims spaces.
-func sanitizeReviewers(raw []string) []string {
-	var out []string
-	for _, r := range raw {
-		r = strings.TrimSpace(r)
-		r = strings.TrimPrefix(r, "@")
-		if r != "" {
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
-// printPRPreview prints a nice-looking preview of the PR before creation.
-func printPRPreview(branch, base, title, body string, reviewers []string) {
+	// 5. Show a preview BEFORE hitting GitHub
 	fmt.Println("🚀 devgod PR preview")
 	fmt.Println("─────────────────────────────────────────────")
 	fmt.Println("Branch:")
 	fmt.Printf("   %s\n\n", branch)
-
 	fmt.Println("Base branch:")
-	fmt.Printf("   %s\n\n", base)
-
+	fmt.Printf("   %s\n\n", baseBranch)
+	fmt.Println("PR size:")
+	fmt.Printf("   %d files, +%d/-%d (~%d lines)\n\n", stats.FilesChanged, stats.LinesAdded, stats.LinesDeleted, totalLines)
 	fmt.Println("Title:")
-	fmt.Printf("   %s\n\n", title)
-
+	fmt.Printf("   %s\n\n", strings.TrimSpace(meta.Title))
 	fmt.Println("Description (body):")
-	fmt.Println(body)
+	fmt.Println(meta.Body)
 	fmt.Println()
 
 	if len(reviewers) > 0 {
-		fmt.Println("Reviewers:")
+		fmt.Println("Reviewers to request:")
 		for _, r := range reviewers {
-			fmt.Printf("   - %s\n", r)
+			fmt.Printf("   - @%s\n", r)
 		}
+		fmt.Println()
+	} else {
+		fmt.Println("Reviewers:")
+		fmt.Println("   (none selected)")
 		fmt.Println()
 	}
 
-	fmt.Println("─────────────────────────────────────────────")
+	// Final confirm before creating the PR
+	if !ui.Confirm("Create this PR on GitHub?") {
+		fmt.Println("❌ PR creation cancelled.")
+		return nil
+	}
+
+	// 6. Call gh to actually create the PR
+	if err := createGitHubPR(branch, baseBranch, meta.Title, meta.Body, reviewers); err != nil {
+		return fmt.Errorf("failed to create PR on GitHub: %w", err)
+	}
+
+	fmt.Println(ui.Green("✅ PR created successfully on GitHub."))
+	return nil
+}
+
+// createGitHubPR calls `gh pr create` with the given metadata and reviewers.
+func createGitHubPR(headBranch, baseBranch, title, body string, reviewers []string) error {
+	args := []string{
+		"pr", "create",
+		"--head", headBranch,
+		"--base", baseBranch,
+		"--title", title,
+		"--body", body,
+	}
+
+	for _, r := range reviewers {
+		r = strings.TrimSpace(r)
+		if r != "" {
+			args = append(args, "--reviewer", r)
+		}
+	}
+
+	cmd := exec.Command("gh", args...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+
+	if err := cmd.Run(); err != nil {
+		fmt.Println(out.String())
+		return err
+	}
+
+	return nil
 }

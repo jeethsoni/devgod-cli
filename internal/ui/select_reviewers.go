@@ -8,31 +8,66 @@ import (
 	"strings"
 )
 
-// SelectMultiple allows the user to pick multiple items from a list.
-func SelectMultiple(prompt string, options []string) []string {
-	fmt.Println(prompt)
-
-	for i, opt := range options {
-		fmt.Printf("%d) %s\n", i+1, opt)
+// SelectMultiple lets the user choose multiple items by numeric index.
+// Example:
+//
+//	items:  ["alice", "bob", "carol"]
+//	prompt: "Select reviewers..."
+//
+// User input: "1,3" -> returns ["alice", "carol"]
+func SelectMultiple(items []string, prompt string) ([]string, error) {
+	if len(items) == 0 {
+		return []string{}, nil
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Select reviewers (comma-separated numbers): ")
 
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
+	for {
+		fmt.Println(prompt)
+		fmt.Print("> ")
 
-	parts := strings.Split(input, ",")
-	var selected []string
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, fmt.Errorf("failed to read input: %w", err)
+		}
 
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		n, err := strconv.Atoi(p)
-		if err != nil || n < 1 || n > len(options) {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			// User chose nothing
+			return []string{}, nil
+		}
+
+		parts := strings.Split(line, ",")
+		var indices []int
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			n, err := strconv.Atoi(p)
+			if err != nil || n < 1 || n > len(items) {
+				fmt.Println(Red("Invalid selection:"), p)
+				fmt.Printf("Please enter numbers between 1 and %d, separated by commas.\n", len(items))
+				indices = nil
+				break
+			}
+			indices = append(indices, n-1) // zero-based
+		}
+
+		if indices == nil {
 			continue
 		}
-		selected = append(selected, options[n-1])
-	}
 
-	return selected
+		// Deduplicate while preserving order
+		seen := make(map[int]bool)
+		var selected []string
+		for _, idx := range indices {
+			if !seen[idx] {
+				seen[idx] = true
+				selected = append(selected, items[idx])
+			}
+		}
+
+		return selected, nil
+	}
 }

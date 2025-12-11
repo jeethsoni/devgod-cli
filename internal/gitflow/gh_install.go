@@ -50,3 +50,29 @@ func installGHWindows() error {
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
+
+func ensureGitHubCLIInstalled() error {
+	if ghInstalled() {
+		return nil
+	}
+
+	fmt.Println(ui.Yellow("⚠️ GitHub CLI (gh) is not installed."))
+
+	if !ui.Confirm("Install GitHub CLI now?") {
+		fmt.Println(ui.Yellow("To use devgod PR features, please install GitHub CLI from:"))
+		fmt.Println()
+		fmt.Println("   https://cli.github.com/")
+		fmt.Println()
+		fmt.Println("Then re-run `devgod pr`.")
+		return fmt.Errorf("GitHub CLI (gh) is required to create PRs")
+	}
+
+	if err := installGH(); err != nil {
+		fmt.Println(ui.Red("❌ Failed to install GitHub CLI automatically."))
+		fmt.Println(ui.Yellow("Please install it manually from https://cli.github.com/ and try again."))
+		return fmt.Errorf("failed to install GitHub CLI: %w", err)
+	}
+
+	fmt.Println(ui.Green("✅ GitHub CLI (gh) installed."))
+	return nil
+}
