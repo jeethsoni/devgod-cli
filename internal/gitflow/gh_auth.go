@@ -35,8 +35,6 @@ func isGHAuthenticated() (bool, string) {
 func ensureGHAuthenticated() error {
 	ok, raw := isGHAuthenticated()
 	if ok {
-		// Optional: debug line
-		// fmt.Println(ui.Green("✔️ GitHub CLI is already authenticated."))
 		return nil
 	}
 

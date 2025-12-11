@@ -17,7 +17,7 @@ type PRSizeStats struct {
 	LinesDeleted int
 }
 
-// PRSizeStatsBetween computes how many files and lines changed between base and head.
+// PRSize computes how many files and lines changed between base and head.
 func PRSize(baseBranch, headBranch string) (*PRSizeStats, error) {
 	cmd := exec.Command("git", "diff", "--numstat", fmt.Sprintf("%s..%s", baseBranch, headBranch))
 	out, err := cmd.Output()
@@ -103,7 +103,7 @@ func CreatePR() error {
 
 	baseBranch := "main" // could be configurable later
 
-	// 🔍 1. Compute PR size stats
+	// Compute PR size stats
 	stats, err := PRSize(baseBranch, branch)
 	if err != nil {
 		return fmt.Errorf("failed to compute PR size: %w", err)
@@ -137,7 +137,6 @@ func CreatePR() error {
 		return fmt.Errorf("PR too large; creation blocked by devgod size guard")
 	}
 
-	// Soft warning: above recommended but not crazy
 	if stats.FilesChanged > softFilesMax || totalLines > softLinesMax {
 		fmt.Println(ui.Yellow("⚠️ This PR is larger than recommended."))
 		fmt.Printf("   Ideal: around %d lines and as few files as possible.\n", idealLinesMax)
@@ -150,33 +149,32 @@ func CreatePR() error {
 			return nil
 		}
 	} else {
-		// Tiny/ideal PR
 		fmt.Println(ui.Green("✅ PR size looks good (within recommended range)."))
 		fmt.Println()
 	}
 
-	// 🔁 2. Build context for AI (summary keeps it concise)
+	// Build context for AI (summary keeps it concise)
 	summary, err := DiffSummary(baseBranch, branch)
 	if err != nil {
 		return fmt.Errorf("failed to compute diff summary: %w", err)
 	}
 
-	// 🧠 3. Ask AI for PR title + body
-	stop := ui.StartSpinner("Asking the PR gods to write your title & description...")
+	// Ask AI for PR title + body
+	stop := ui.StartSpinner("🪄 Asking the PR gods to write your title & description...")
 	meta, err := ai.GeneratePRMetadata(state.ActiveTask.Intent, summary, branch, baseBranch)
 	stop()
 	if err != nil {
 		return fmt.Errorf("failed to generate PR metadata with AI: %w", err)
 	}
 
-	// 4. Reviewers selection
+	// Reviewers selection
 	reviewers, err := getReviewersOrAsk()
 	if err != nil {
 		return fmt.Errorf("failed to select reviewers: %w", err)
 	}
 
-	// 5. Show a preview BEFORE hitting GitHub
-	fmt.Println("🚀 devgod PR preview")
+	// Show a preview before hitting GitHub
+	fmt.Println("🚀 DEVGOD PR PREVIEW")
 	fmt.Println("─────────────────────────────────────────────")
 	fmt.Println("Branch:")
 	fmt.Printf("   %s\n\n", branch)
@@ -208,7 +206,7 @@ func CreatePR() error {
 		return nil
 	}
 
-	// 6. Call gh to actually create the PR
+	// Call gh to actually create the PR
 	if err := createGitHubPR(branch, baseBranch, meta.Title, meta.Body, reviewers); err != nil {
 		return fmt.Errorf("failed to create PR on GitHub: %w", err)
 	}
