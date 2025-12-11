@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-const DefaultModel = "qwen2.5-coder:7b"
+const DefaultModel = "llama3.1"
 
 // GenerateBranchName uses AI to create a clean git branch name.
 func GenerateBranchName(intent string) (string, error) {
@@ -99,31 +99,66 @@ fix/empty-password-login-crash-BUG-21`
 
 // GenerateCommitMessage uses AI to generate a single-line commit message.
 func GenerateCommitMessage(intent, diff string) (string, error) {
-	systemPrompt := `You are a senior engineer writing concise conventional commit messages.
+	const commitMessagePrompt = `
+You are generating a Git commit message.
 
-					Given:
-					- an intent (what the developer was trying to do)
-					- a git diff (staged changes)
+You will be given:
+- A short natural language task intent
+- A git diff of the staged changes
 
-					RULES:
-					- Respond with a SINGLE LINE commit message.
-					- Format: type: short summary
-					- Types: feat, fix, chore, refactor, docs, test, style
-					- Use lowercase.
-					- Aim for 50–72 characters if possible.
-					- No trailing period.
-					- Do NOT include anything except the commit line.
-					- Do NOT explain your reasoning.
+Your job is to produce a SINGLE, SHORT commit message.
 
-					GOOD EXAMPLES:
-					fix: prevent crash when password is empty
-					feat: add onboarding flow for new users
-					chore: remove deprecated auth endpoints
-					refactor: simplify product query building`
+HARD RULES (NO EXCEPTIONS):
+- Output MUST be EXACTLY ONE LINE.
+- FORMAT MUST be: "<type>: <short description>"
+- <type> MUST be one of: feat, fix, chore, refactor, docs, style, test
+- <short description> MUST be 3–10 words ONLY.
+- Total length MUST be <= 60 characters.
+- DO NOT include a body, only the one subject line.
+- DO NOT describe the code in detail.
+- DO NOT explain what the commit does in paragraphs.
+- DO NOT start with "This commit" or anything similar.
+- DO NOT mention files, functions, or modules by name unless necessary.
+- DO NOT add lists, bullets, or multiple sentences.
+- DO NOT add quotes, markdown, or extra formatting.
+
+SAFETY RULES:
+- If you detect obvious secrets (API keys, passwords, tokens, private keys,
+  .pem contents, .env values, personal data):
+  - Output exactly:
+    WARNING: possible secret or sensitive data in diff; remove it before committing.
+- If you detect obviously large/binary artifacts that should not be in git
+  (e.g. big media, archives, compiled binaries):
+  - Output exactly:
+    WARNING: large or binary files detected; consider Git LFS instead of committing.
+
+NORMAL CASE (NO SECRETS, NO LARGE FILES):
+- Choose the <type> based on the intent+diff:
+  - feat: new functionality
+  - fix: bug fix
+  - chore: tooling / config / plumbing
+  - refactor: structural code change without new behavior
+  - docs: documentation only
+  - style: formatting / cosmetic only
+  - test: tests only
+- The description should summarize the changes at a high level only.
+- Use imperative mood for the description:
+  e.g. "add pr flow", NOT "added pr flow" or "adds pr flow".
+- Do NOT restate the entire diff.
+- Do NOT write an essay.
+
+ABSOLUTE OUTPUT RULE:
+- ENTIRE output MUST be ONE SINGLE LINE:
+  - Either:
+      "<type>: <short description>"
+    or:
+      a single WARNING line starting with "WARNING:" as described above.
+- NO extra text before or after.
+`
 
 	userPrompt := fmt.Sprintf("intent:\n%s\n\nstaged diff:\n%s", strings.TrimSpace(intent), strings.TrimSpace(diff))
 
-	raw, err := Chat(DefaultModel, systemPrompt, userPrompt)
+	raw, err := Chat(DefaultModel, commitMessagePrompt, userPrompt)
 	if err != nil {
 		return "", err
 	}

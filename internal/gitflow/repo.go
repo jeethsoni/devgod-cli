@@ -1,6 +1,8 @@
 package gitflow
 
 import (
+	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/jeethsoni/devgod-cli/internal/shell"
@@ -65,4 +67,45 @@ func StagedSummary() (string, error) {
 func CheckoutBranch(name string) error {
 	_, err := shell.Run("git", "checkout", name)
 	return err
+}
+
+// parseGitHubOwnerRepo extracts "owner" and "repo" from the git remote URL.
+// Supports:
+// - git@github.com:owner/repo.git
+// - https://github.com/owner/repo.git
+// - http://github.com/owner/repo.git
+func parseGitHubOwnerRepo() (string, string, error) {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read git remote URL: %w", err)
+	}
+
+	url := strings.TrimSpace(string(out))
+
+	var repoPath string
+
+	switch {
+	case strings.HasPrefix(url, "git@github.com:"):
+		repoPath = strings.TrimPrefix(url, "git@github.com:")
+	case strings.HasPrefix(url, "https://github.com/"):
+		repoPath = strings.TrimPrefix(url, "https://github.com/")
+	case strings.HasPrefix(url, "http://github.com/"):
+		repoPath = strings.TrimPrefix(url, "http://github.com/")
+	default:
+		return "", "", fmt.Errorf("origin does not look like a GitHub URL: %s", url)
+	}
+
+	// Remove trailing .git if present
+	repoPath = strings.TrimSuffix(repoPath, ".git")
+
+	parts := strings.Split(repoPath, "/")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("unexpected GitHub repo path: %s", repoPath)
+	}
+
+	owner := parts[0]
+	repo := parts[1]
+
+	return owner, repo, nil
 }

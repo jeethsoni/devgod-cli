@@ -91,8 +91,6 @@ func FinishTask() error {
 		return fmt.Errorf("no active task found")
 	}
 
-	// Check if the user is still on the correct branch
-	// Check if the user is still on the correct branch
 	currentBranch, err := CurrentBranch()
 	if err == nil && currentBranch != state.ActiveTask.Branch {
 		fmt.Println(ui.Yellow("⚠️ You are NOT on the branch for this task."))
@@ -105,7 +103,6 @@ func FinishTask() error {
 			return nil
 		}
 
-		// Try to switch branches
 		if err := CheckoutBranch(state.ActiveTask.Branch); err != nil {
 			fmt.Println(ui.Red("❌ Failed to switch branches automatically."))
 			fmt.Println("Please run:")
@@ -125,6 +122,7 @@ func FinishTask() error {
 		}
 	}
 
+	// Full staged diff
 	diff, err := StagedDiff()
 	if err != nil {
 		return err
@@ -135,19 +133,40 @@ func FinishTask() error {
 		return nil
 	}
 
-	// Ai commit message with loading dots
+	// Name-status summary (for counting files + preview)
+	summary, _ := StagedSummary() // ignore summary error; not fatal
+
+	// Decide what to feed to AI: full diff for small changes, summary for big ones
+	contextForAI := diff
+	if summary != "" {
+		lines := strings.Split(summary, "\n")
+		changedFiles := 0
+		for _, l := range lines {
+			if strings.TrimSpace(l) != "" {
+				changedFiles++
+			}
+		}
+
+		// If more than 5 files changed, use the summary instead of full diff
+		if changedFiles > 5 {
+			contextForAI = fmt.Sprintf(
+				"Changed files (name-status):\n%s\n",
+				strings.TrimSpace(summary),
+			)
+		}
+	}
+
+	// AI commit message with loading dots
 	stop := ui.StartSpinner("Letting the commit gods cook...")
 
-	// AI commit message
-	commitMsg, err := ai.GenerateCommitMessage(state.ActiveTask.Intent, diff)
+	// AI commit message (now based on either diff or summary)
+	commitMsg, err := ai.GenerateCommitMessage(state.ActiveTask.Intent, contextForAI)
 	stop()
 	if err != nil {
 		fmt.Println(ui.Red("❌ Failed to generate commit message with AI."))
 		fmt.Println("Please complete this commit manually using git (e.g. `git commit -m \"...\"`) and then continue your flow.")
 		return err
 	}
-
-	summary, _ := StagedSummary() // ignore error; not critical for commit
 
 	plan := ui.CommitPlan{
 		Branch:        state.ActiveTask.Branch,
