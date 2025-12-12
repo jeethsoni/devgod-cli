@@ -104,6 +104,14 @@ You are generating a Git commit message.
 PRIMARY SOURCE OF TRUTH:
 - The staged changes (diff or summary)
 
+- The task intent provided.
+
+- Use the intent to understand the purpose of the changes,
+  but the commit message MUST reflect what is actually in the staged changes.
+
+- If the intent describes changes NOT present in the staged diff,
+  DO NOT include those in the commit message.
+
 Your job is to produce a SINGLE, SHORT commit message.
 
 HARD RULES (NO EXCEPTIONS):
