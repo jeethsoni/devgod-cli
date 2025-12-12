@@ -124,7 +124,7 @@ func CreatePR() error {
 		hardLinesMax  = 400
 	)
 
-	// Hard block: way too big
+	// for commit way too big
 	if stats.FilesChanged > hardFilesMax || totalLines > hardLinesMax {
 		fmt.Println(ui.Red("❌ This PR is very large according to best practices."))
 		fmt.Printf("   Recommended: <= %d files, <= %d lines of changes.\n", softFilesMax, softLinesMax)
