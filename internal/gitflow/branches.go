@@ -86,19 +86,19 @@ func selectBaseBranchInteractive() (string, error) {
 	}
 
 	fmt.Println()
-	fmt.Println("Available base branches (from GitHub):")
+	fmt.Println(ui.Green("Available base branches (from GitHub):"))
 	for i, b := range branches {
 		fmt.Printf("  %2d) %s\n", i+1, b)
 	}
 	fmt.Println()
 
-	selected, err := ui.SelectOne(branches, "Select base branch by number:")
+	selected, err := ui.SelectOne(branches, (ui.Cyan("Select base branch by number:")))
 	if err != nil {
 		return "", err
 	}
 
-	fmt.Println(ui.Green("✔️ Base branch:"), selected)
 	fmt.Println()
 
+	fmt.Println(ui.Green("✔️ Base branch:"), selected)
 	return selected, nil
 }

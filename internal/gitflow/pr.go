@@ -145,9 +145,6 @@ func CreatePR() error {
 			fmt.Println(ui.Red("PR creation cancelled. Consider splitting into smaller PRs."))
 			return nil
 		}
-	} else {
-		fmt.Println(ui.Green("✅ PR size looks good (within recommended range)."))
-		fmt.Println()
 	}
 
 	// Build context for AI (summary keeps it concise)
@@ -169,31 +166,48 @@ func CreatePR() error {
 	if err != nil {
 		return fmt.Errorf("failed to select reviewers: %w", err)
 	}
-
 	// Show a preview before hitting GitHub
-	fmt.Println("🚀 DEVGOD PR PREVIEW")
-	fmt.Println("─────────────────────────────────────────────")
-	fmt.Println("Branch:")
-	fmt.Printf("   %s\n\n", branch)
-	fmt.Println("Base branch:")
-	fmt.Printf("   %s\n\n", baseBranch)
-	fmt.Println("Title:")
-	fmt.Printf("   %s\n\n", strings.TrimSpace(meta.Title))
-	fmt.Println("Description (body):")
-	fmt.Println(meta.Body)
+	fmt.Println()
+	fmt.Println(ui.TitleStyle.Render("🚀 DEVGOD PR PREVIEW"))
+
+	fmt.Println("🌿 " + ui.BranchLabelStyle.Render("Branch:"))
+	fmt.Println("   " + ui.ValueStyle.Render(branch))
+	fmt.Println()
+
+	fmt.Println("🧱 " + ui.SectionTitleStyle.Render("Base branch:"))
+	fmt.Println("   " + ui.ValueStyle.Render(baseBranch))
+	fmt.Println()
+
+	fmt.Println("📝 " + ui.SectionTitleStyle.Render("Title:"))
+	fmt.Println("   " + ui.ValueStyle.Render(strings.TrimSpace(meta.Title)))
+	fmt.Println()
+
+	fmt.Println("📄 " + ui.SectionTitleStyle.Render("Description:"))
+	// Keep body formatting; just indent it
+	body := strings.TrimRight(meta.Body, "\n")
+	for _, line := range strings.Split(body, "\n") {
+		if strings.TrimSpace(line) == "" {
+			fmt.Println()
+			continue
+		}
+		fmt.Println("   " + ui.ValueStyle.Render(line))
+	}
 	fmt.Println()
 
 	if len(reviewers) > 0 {
-		fmt.Println("Reviewers to request:")
+		fmt.Println("👥 " + ui.SectionTitleStyle.Render("Reviewers to request:"))
 		for _, r := range reviewers {
-			fmt.Printf("   - @%s\n", r)
+			fmt.Println("   " + ui.CyanStyle.Render("@"+r))
 		}
 		fmt.Println()
 	} else {
-		fmt.Println("Reviewers:")
-		fmt.Println("   (none selected)")
+		fmt.Println("👥 " + ui.SectionTitleStyle.Render("Reviewers:"))
+		fmt.Println("   " + ui.ValueStyle.Render("(none selected)"))
 		fmt.Println()
 	}
+
+	fmt.Println(ui.Divider.Render(strings.Repeat("─", 45)))
+	fmt.Println()
 
 	// Final confirm before creating the PR
 	if !ui.Confirm("Create this PR on GitHub?") {

@@ -81,7 +81,6 @@ fix/empty-password-login-crash-BUG-21`
 	branch = strings.TrimSpace(branch)
 	branch = strings.ReplaceAll(branch, " ", "-")
 
-	// Minimal validation: still no fallback, just error if garbage
 	if branch == "" ||
 		len(branch) < 5 ||
 		!strings.Contains(branch, "/") {
@@ -98,13 +97,12 @@ fix/empty-password-login-crash-BUG-21`
 }
 
 // GenerateCommitMessage uses AI to generate a single-line commit message.
-func GenerateCommitMessage(intent, diff string) (string, error) {
+func GenerateCommitMessage(diff string) (string, error) {
 	const commitMessagePrompt = `
 You are generating a Git commit message.
 
-You will be given:
-- A short natural language task intent
-- A git diff of the staged changes
+PRIMARY SOURCE OF TRUTH:
+- The staged changes (diff or summary)
 
 Your job is to produce a SINGLE, SHORT commit message.
 
@@ -121,6 +119,13 @@ HARD RULES (NO EXCEPTIONS):
 - DO NOT mention files, functions, or modules by name unless necessary.
 - DO NOT add lists, bullets, or multiple sentences.
 - DO NOT add quotes, markdown, or extra formatting.
+
+CHANGE COMPLETENESS RULE:
+- If the staged diff includes file deletions (D) or renames (R),
+  the commit message MUST reflect this.
+- The description may use generic wording like:
+  "remove unused file", "delete obsolete code", or "clean up old files".
+- Do NOT ignore deletions or renames in favor of intent alone.
 
 SAFETY RULES:
 - If you detect obvious secrets (API keys, passwords, tokens, private keys,
@@ -156,8 +161,10 @@ ABSOLUTE OUTPUT RULE:
 - NO extra text before or after.
 `
 
-	userPrompt := fmt.Sprintf("intent:\n%s\n\nstaged diff:\n%s", strings.TrimSpace(intent), strings.TrimSpace(diff))
-
+	userPrompt := fmt.Sprintf(
+		`STAGED CHANGES (PRIMARY):%s`,
+		strings.TrimSpace(diff),
+	)
 	raw, err := Chat(DefaultModel, commitMessagePrompt, userPrompt)
 	if err != nil {
 		return "", err
