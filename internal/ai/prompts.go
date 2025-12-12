@@ -97,22 +97,20 @@ fix/empty-password-login-crash-BUG-21`
 }
 
 // GenerateCommitMessage uses AI to generate a single-line commit message.
-func GenerateCommitMessage(intent, diff string) (string, error) {
+// Priority: summary -> diff -> intent.
+func GenerateCommitMessage(intent, summary, diff string) (string, error) {
 	const commitMessagePrompt = `
 You are generating a Git commit message.
 
-PRIMARY SOURCE OF TRUTH:
-- The staged changes (diff or summary)
+PRIMARY SOURCE OF TRUTH (IN ORDER):
+1) STAGED SUMMARY (what changed: A/M/D/R)
+2) STAGED DIFF (details)
+3) TASK INTENT (wording help only)
 
-- The task intent provided.
+If there is any conflict, the staged summary/diff ALWAYS win.
 
-- Use the intent to understand the purpose of the changes,
-  but the commit message MUST reflect what is actually in the staged changes.
-
-- If the intent describes changes NOT present in the staged diff,
-  DO NOT include those in the commit message.
-
-Your job is to produce a SINGLE, SHORT commit message.
+Your job is to output ONE SINGLE LINE in this format:
+"<type>: <short description>"
 
 HARD RULES (NO EXCEPTIONS):
 - Output MUST be EXACTLY ONE LINE.
@@ -120,61 +118,60 @@ HARD RULES (NO EXCEPTIONS):
 - <type> MUST be one of: feat, fix, chore, refactor, docs, style, test
 - <short description> MUST be 3–10 words ONLY.
 - Total length MUST be <= 60 characters.
-- DO NOT include a body, only the one subject line.
-- DO NOT describe the code in detail.
-- DO NOT explain what the commit does in paragraphs.
-- DO NOT start with "This commit" or anything similar.
-- DO NOT mention files, functions, or modules by name unless necessary.
-- DO NOT add lists, bullets, or multiple sentences.
-- DO NOT add quotes, markdown, or extra formatting.
+- No body. No extra lines. No markdown. No quotes. No emojis.
+- Do NOT mention files/functions/modules by name unless absolutely necessary.
+- Do NOT output contradictory subjects like "feat: fix ...".
+  If the description contains "fix", the type MUST be "fix".
+
+TYPE SELECTION (STRICT):
+- Use "fix" when the change prevents or corrects incorrect behavior in an existing flow
+  (e.g., PR/commit flow failing, errors, broken behavior, missing required steps).
+- Use "feat" ONLY when it introduces a new user-facing capability (not just preventing an error).
+- Use "chore" for tooling/config/maintenance without behavior change.
+- Use "refactor" only for structural code changes without behavior change.
+- Use "docs/style/test" only when the staged changes are exclusively those categories.
 
 CHANGE COMPLETENESS RULE:
-- If the staged diff includes file deletions (D) or renames (R),
-  the commit message MUST reflect this.
-- The description may use generic wording like:
-  "remove unused file", "delete obsolete code", or "clean up old files".
-- Do NOT ignore deletions or renames in favor of intent alone.
+- If staged changes include deletions (D) or renames (R), the message MUST reflect that
+  using generic wording ("remove unused code", "clean up old files", "rename ..." without filenames).
 
 SAFETY RULES:
-- If you detect obvious secrets (API keys, passwords, tokens, private keys,
-  .pem contents, .env values, personal data):
-  - Output exactly:
-    WARNING: possible secret or sensitive data in diff; remove it before committing.
-- If you detect obviously large/binary artifacts that should not be in git
-  (e.g. big media, archives, compiled binaries):
-  - Output exactly:
-    WARNING: large or binary files detected; consider Git LFS instead of committing.
+- If you detect obvious secrets (API keys, passwords, tokens, private keys, .pem contents, .env values, personal data):
+  Output exactly:
+  WARNING: possible secret or sensitive data in diff; remove it before committing.
+- If you detect obviously large/binary artifacts that should not be in git (big media, archives, compiled binaries):
+  Output exactly:
+  WARNING: large or binary files detected; consider Git LFS instead of committing.
 
-NORMAL CASE (NO SECRETS, NO LARGE FILES):
-- Choose the <type> based on the intent+diff:
-  - feat: new functionality
-  - fix: bug fix
-  - chore: tooling / config / plumbing
-  - refactor: structural code change without new behavior
-  - docs: documentation only
-  - style: formatting / cosmetic only
-  - test: tests only
-- The description should summarize the changes at a high level only.
-- Use imperative mood for the description:
-  e.g. "add pr flow", NOT "added pr flow" or "adds pr flow".
-- Do NOT restate the entire diff.
-- Do NOT write an essay.
+QUALITY RULES:
+- Avoid vague descriptions like "fix pr flow".
+- Prefer concrete outcomes like:
+  "push branch before creating pr"
+  "handle unpushed branches before pr creation"
+  "prevent pr creation failure when branch is local"
+- Use imperative mood: "add", "update", "handle", "prevent", "push".
 
 ABSOLUTE OUTPUT RULE:
-- ENTIRE output MUST be ONE SINGLE LINE:
-  - Either:
-      "<type>: <short description>"
-    or:
-      a single WARNING line starting with "WARNING:" as described above.
-- NO extra text before or after.
+- Output MUST be exactly ONE LINE:
+  - Either "<type>: <short description>"
+  - Or a single WARNING line starting with "WARNING:"
 `
 
 	userPrompt := fmt.Sprintf(
-		`STAGED CHANGES:%s
-	INTENT:%s`,
+		`STAGED SUMMARY (PRIMARY):
+%s
+
+STAGED DIFF (DETAILS):
+%s
+
+TASK INTENT (SECONDARY):
+%s
+`,
+		strings.TrimSpace(summary),
 		strings.TrimSpace(diff),
 		strings.TrimSpace(intent),
 	)
+
 	raw, err := Chat(DefaultModel, commitMessagePrompt, userPrompt)
 	if err != nil {
 		return "", err
@@ -182,6 +179,5 @@ ABSOLUTE OUTPUT RULE:
 
 	msg := strings.TrimSpace(raw)
 	msg = strings.Split(msg, "\n")[0]
-
 	return msg, nil
 }

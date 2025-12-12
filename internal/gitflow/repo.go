@@ -2,6 +2,7 @@ package gitflow
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -108,4 +109,20 @@ func parseGitHubOwnerRepo() (string, string, error) {
 	repo := parts[1]
 
 	return owner, repo, nil
+}
+func IsBranchPushed(branch string) bool {
+	// returns true if origin/branch exists
+	out, err := exec.Command("git", "ls-remote", "--heads", "origin", branch).Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) != ""
+}
+
+func PushBranch(branch string) error {
+	cmd := exec.Command("git", "push", "-u", "origin", branch)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
 }

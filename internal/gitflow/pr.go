@@ -214,6 +214,16 @@ func CreatePR() error {
 		fmt.Println("❌ PR creation cancelled.")
 		return nil
 	}
+	if !IsBranchPushed(branch) {
+		fmt.Println(ui.Yellow("Pushing branch to origin..."))
+
+		if err := PushBranch(branch); err != nil {
+			return fmt.Errorf("failed to push branch: %w", err)
+		}
+
+		fmt.Println(ui.Green("✔️ Branch pushed to origin."))
+		fmt.Println()
+	}
 
 	// Call gh to actually create the PR
 	if err := createGitHubPR(baseBranch, meta.Title, meta.Body, reviewers); err != nil {
