@@ -1,10 +1,34 @@
-# Devgod ⚡️
+# Devgod
 
 **Devgod** is a command-line tool that helps developers use Git more easily and confidently.
 
 It guides you through common Git tasks so you don’t have to remember commands, naming rules, or best practices every time. You focus on writing code, and devgod helps handle the workflow around it.
 
 It doesn’t replace Git or hide what’s happening. It simply makes each step clearer, safer, and easier to follow.
+
+## 🦙 Install Ollama
+
+Download and install Ollama from:
+
+👉 <https://ollama.com>
+
+or
+
+```bash
+brew install ollama
+```
+
+Pull a model:
+
+```bash
+ollama pull llama3.1
+```
+
+Verify Ollama is running:
+
+```bash
+ollama run llama3.1
+```
 
 ## 📦 Installation
 
@@ -88,6 +112,6 @@ Always review the proposed message before confirming the commit.
 
 MIT
 
-Built with ❤️ by Jeet Soni and Rohit Samparaboyina
+Built with ❤️ by **Jeet Soni**
 
 Happy Coding 💻
