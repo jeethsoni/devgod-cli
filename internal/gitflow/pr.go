@@ -101,7 +101,10 @@ func CreatePR() error {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
-	baseBranch := "main" // could be configurable later
+	baseBranch, err := selectBaseBranchInteractive()
+	if err != nil {
+		return fmt.Errorf("failed to choose base branch: %w", err)
+	}
 
 	// Compute PR size stats
 	stats, err := PRSize(baseBranch, branch)
@@ -110,12 +113,6 @@ func CreatePR() error {
 	}
 	totalLines := stats.LinesAdded + stats.LinesDeleted
 
-	fmt.Println()
-	fmt.Println("📏 PR size check")
-	fmt.Printf("   Files changed: %d\n", stats.FilesChanged)
-	fmt.Printf("   Lines added:   %d\n", stats.LinesAdded)
-	fmt.Printf("   Lines deleted: %d\n", stats.LinesDeleted)
-	fmt.Printf("   Total changes: %d lines\n", totalLines)
 	fmt.Println()
 
 	// Best-practice thresholds
@@ -180,8 +177,6 @@ func CreatePR() error {
 	fmt.Printf("   %s\n\n", branch)
 	fmt.Println("Base branch:")
 	fmt.Printf("   %s\n\n", baseBranch)
-	fmt.Println("PR size:")
-	fmt.Printf("   %d files, +%d/-%d (~%d lines)\n\n", stats.FilesChanged, stats.LinesAdded, stats.LinesDeleted, totalLines)
 	fmt.Println("Title:")
 	fmt.Printf("   %s\n\n", strings.TrimSpace(meta.Title))
 	fmt.Println("Description (body):")
@@ -207,7 +202,7 @@ func CreatePR() error {
 	}
 
 	// Call gh to actually create the PR
-	if err := createGitHubPR(branch, baseBranch, meta.Title, meta.Body, reviewers); err != nil {
+	if err := createGitHubPR(baseBranch, meta.Title, meta.Body, reviewers); err != nil {
 		return fmt.Errorf("failed to create PR on GitHub: %w", err)
 	}
 
@@ -215,14 +210,15 @@ func CreatePR() error {
 	return nil
 }
 
-// createGitHubPR calls `gh pr create` with the given metadata and reviewers.
-func createGitHubPR(headBranch, baseBranch, title, body string, reviewers []string) error {
+func createGitHubPR(baseBranch, title, body string, reviewers []string) error {
 	args := []string{
 		"pr", "create",
-		"--head", headBranch,
-		"--base", baseBranch,
 		"--title", title,
 		"--body", body,
+	}
+
+	if baseBranch != "" {
+		args = append(args, "--base", baseBranch)
 	}
 
 	for _, r := range reviewers {

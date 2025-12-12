@@ -71,3 +71,37 @@ func SelectMultiple(items []string, prompt string) ([]string, error) {
 		return selected, nil
 	}
 }
+
+// SelectOne lets the user choose a single item by numeric index.
+// Returns the selected item string.
+func SelectOne(items []string, prompt string) (string, error) {
+	if len(items) == 0 {
+		return "", fmt.Errorf("no items to select from")
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		fmt.Println(prompt)
+		fmt.Print("> ")
+
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return "", fmt.Errorf("failed to read input: %w", err)
+		}
+
+		nStr := strings.TrimSpace(line)
+		if nStr == "" {
+			fmt.Println(Red("Please enter a number corresponding to a branch."))
+			continue
+		}
+
+		n, err := strconv.Atoi(nStr)
+		if err != nil || n < 1 || n > len(items) {
+			fmt.Printf("Please enter a number between 1 and %d.\n", len(items))
+			continue
+		}
+
+		return items[n-1], nil
+	}
+}
