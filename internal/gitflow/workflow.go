@@ -160,7 +160,7 @@ func FinishTask() error {
 	stop := ui.StartSpinner("Letting the commit gods cook...")
 
 	// AI commit message (now based on either diff or summary)
-	commitMsg, err := ai.GenerateCommitMessage(contextForAI)
+	commitMsg, err := ai.GenerateCommitMessage(state.ActiveTask.Intent, contextForAI)
 	stop()
 	if err != nil {
 		fmt.Println(ui.Red("❌ Failed to generate commit message with AI."))

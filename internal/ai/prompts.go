@@ -97,7 +97,7 @@ fix/empty-password-login-crash-BUG-21`
 }
 
 // GenerateCommitMessage uses AI to generate a single-line commit message.
-func GenerateCommitMessage(diff string) (string, error) {
+func GenerateCommitMessage(intent, diff string) (string, error) {
 	const commitMessagePrompt = `
 You are generating a Git commit message.
 
@@ -162,8 +162,10 @@ ABSOLUTE OUTPUT RULE:
 `
 
 	userPrompt := fmt.Sprintf(
-		`STAGED CHANGES (PRIMARY):%s`,
+		`STAGED CHANGES:%s
+	INTENT:%s`,
 		strings.TrimSpace(diff),
+		strings.TrimSpace(intent),
 	)
 	raw, err := Chat(DefaultModel, commitMessagePrompt, userPrompt)
 	if err != nil {
