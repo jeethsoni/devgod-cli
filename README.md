@@ -112,6 +112,6 @@ Always review the proposed message before confirming the commit.
 
 MIT
 
-Built with ❤️ by **Jeet Soni**
+Built with ❤️ by **Jeet Soni** and **Rohit Samparaboyina**
 
 Happy Coding 💻
